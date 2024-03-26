@@ -193,6 +193,116 @@ p5.prototype.perspective = function (...args) {
   return this;
 };
 
+
+/**
+ *
+ * Enable or disable perspective for lines in the WebGL renderer.
+ * The behavior of `linePerspective()`  is associated with the type of camera projection being used.
+ *
+ * - When using `perspective()`, which simulates realistic perspective, linePerspective
+ *    is set to `true` by default. This means that lines will be affected by the current
+ *    camera's perspective, resulting in a more natural appearance.
+ * - When using `ortho()` or `frustum()`, which do not simulate realistic perspective,
+ *    linePerspective is set to `false` by default. In this case, lines will have a uniform
+ *    scale regardless of the camera's perspective, providing a more predictable and
+ *    consistent appearance.
+ * - You can override the default behavior by explicitly calling `linePerspective()` after
+ *    using `perspective()`, `ortho()`, or `frustum()`. This allows you to customize the line
+ *    perspective based on your specific requirements.
+ *
+ * @method linePerspective
+ * @for p5
+ * @param {boolean} enable - Set to `true` to enable line perspective, `false` to disable.
+ *
+ * @example
+ * <div>
+ * <code>
+ * function setup() {
+ *   createCanvas(100, 100, WEBGL);
+ *   setAttributes({ antialias: true });
+ *   strokeWeight(3);
+ *   describe(
+ *     'rotated 3D boxes have their stroke weights affected if toggled back and forth with mouse clicks.'
+ *   );
+ * }
+ *
+ * function draw() {
+ *   background(220);
+ *   rotateY(PI/24);
+ *   rotateZ(PI/8);
+ *   translate(0, 0, 350);
+ *   for (let i = 0; i < 12; i++) {
+ *     translate(0, 0, -70);
+ *     box(30);
+ *   }
+ * }
+ *
+ * function mousePressed() {
+ *   linePerspective(!linePerspective());
+ * }
+ * </code>
+ * </div>
+ *
+ * <div>
+ * <code>
+ * function setup() {
+ *   createCanvas(100, 100, WEBGL);
+ *   strokeWeight(4);
+ * }
+ *
+ * function draw() {
+ *   background(220);
+ *
+ *   // Using orthographic projection
+ *   ortho();
+ *
+ *   // Enable line perspective explicitly
+ *   linePerspective(true);
+ *
+ *   // Draw a rotating cube
+ *   rotateX(frameCount * 0.01);
+ *   rotateY(frameCount * 0.01);
+ *   box(25);
+ *
+ *   // Move to a new position
+ *   translate(0, -60, 0);
+ *
+ *   // Using perspective projection
+ *   perspective();
+ *
+ *   // Disable line perspective explicitly
+ *   linePerspective(false);
+ *
+ *   // Draw another rotating cube with perspective
+ *   rotateX(frameCount * 0.01);
+ *   rotateY(frameCount * 0.01);
+ *   box(25);
+ * }
+ * </code>
+ * </div>
+ * @alt
+ * Demonstrates the dynamic control of line perspective in a 3D environment with rotating boxes.
+ */
+/**
+ * @method linePerspective
+ * @return {boolean} The boolean value representing the current state of linePerspective().
+ */
+
+p5.prototype.linePerspective = function (enable) {
+  p5._validateParameters('linePerspective', arguments);
+  if (!(this._renderer instanceof p5.RendererGL)) {
+    throw new Error('linePerspective() must be called in WebGL mode.');
+  }
+  if (enable !== undefined) {
+    // Set the line perspective if enable is provided
+    this._renderer._curCamera.useLinePerspective = enable;
+  } else {
+    // If no argument is provided, return the current value
+    return this._renderer._curCamera.useLinePerspective;
+  }
+};
+
+
 /**
  * Sets an orthographic projection for the current camera in a 3D sketch
  * and defines a box-shaped viewing frustum within which objects are seen.
@@ -205,7 +315,7 @@ p5.prototype.perspective = function (...args) {
  * maximum z values.
  *
  * If no parameters are given, the following default is used:
- * ortho(-width/2, width/2, -height/2, height/2, 0, max(width, height)).
+ * ortho(-width/2, width/2, -height/2, height/2, 0, max(width, height) + 800).
  * @method  ortho
  * @for p5
  * @param  {Number} [left]   camera frustum left plane
@@ -222,8 +332,7 @@ p5.prototype.perspective = function (...args) {
  * //there's no vanishing point
  * function setup() {
  *   createCanvas(100, 100, WEBGL);
- *   camera(0, 0, 50*sqrt(3), 0, 0, 0, 0, 1, 0);
- *   ortho(-width / 2, width / 2, height / 2, -height / 2, 0, 500);
+ *   ortho();
  *   describe(
  *     'two 3D boxes move back and forth along same plane, rotating as mouse is dragged.'
  *   );
@@ -488,7 +597,7 @@ p5.Camera = class Camera {
     this._renderer = renderer;
 
     this.cameraType = 'default';
-
+    this.useLinePerspective = true;
     this.cameraMatrix = new p5.Matrix();
     this.projMatrix = new p5.Matrix();
     this.yScale = 1;

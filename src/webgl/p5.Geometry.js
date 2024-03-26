@@ -24,6 +24,9 @@ p5.Geometry = class Geometry {
     //@type [p5.Vector]
     this.vertices = [];
 
+    this.boundingBoxCache = null;
+
+
     //an array containing every vertex for stroke drawing
     this.lineVertices = new p5.DataArray();
 
@@ -66,13 +69,124 @@ p5.Geometry = class Geometry {
     this.detailY = detailY !== undefined ? detailY : 1;
     this.dirtyFlags = {};
 
+    this._hasFillTransparency = undefined;
+    this._hasStrokeTransparency = undefined;
+
     if (callback instanceof Function) {
       callback.call(this);
     }
-    return this; // TODO: is this a constructor?
+  }
+
+  /**
+ * Custom bounding box calculation based on the object's vertices.
+ * The bounding box is a rectangular prism that encompasses the entire object.
+ * It is defined by the minimum and maximum coordinates along each axis, as well
+ * as the size and offset of the box.
+ *
+ * It returns an object containing the bounding box properties:
+ *
+ *   - `min`: The minimum coordinates of the bounding box as a p5.Vector.
+ *   - `max`: The maximum coordinates of the bounding box as a p5.Vector.
+ *   - `size`: The size of the bounding box as a p5.Vector.
+ *   - `offset`: The offset of the bounding box as a p5.Vector.
+ *
+ * @method calculateBoundingBox
+ * @memberof p5.Geometry.prototype
+ * @returns {Object}
+ *
+ * @example
+ *
+ * <div>
+ * <code>
+ * let particles;
+ * let button;
+ * let resultParagraph;
+ *
+ * function setup() {
+ *   createCanvas(100, 100, WEBGL);
+ *   button = createButton('New');
+ *   button.mousePressed(makeParticles);
+ *
+ *   resultParagraph = createElement('pre').style('width', '200px' );
+ *   resultParagraph.style('font-family', 'monospace');
+ *   resultParagraph.style('font-size', '12px');
+ *   makeParticles();
+ * }
+ *
+ * function makeParticles() {
+ *   if (particles) freeGeometry(particles);
+ *
+ *   particles = buildGeometry(() => {
+ *     for (let i = 0; i < 60; i++) {
+ *       push();
+ *       translate(
+ *         randomGaussian(0, 200),
+ *         randomGaussian(0, 100),
+ *         randomGaussian(0, 150)
+ *       );
+ *       sphere(10);
+ *       pop();
+ *     }
+ *   });
+ *
+ *   const boundingBox = particles.calculateBoundingBox();
+ *   resultParagraph.html('Bounding Box: \n' + JSON.stringify(boundingBox, null, 2));
+ * }
+ *
+ * function draw() {
+ *   background(255);
+ *   noStroke();
+ *   lights();
+ *   orbitControl();
+ *   model(particles);
+ * }
+ *
+ * </code>
+ * </div>
+ *
+ */
+
+  calculateBoundingBox() {
+    if (this.boundingBoxCache) {
+      return this.boundingBoxCache; // Return cached result if available
+    }
+
+    let minVertex = new p5.Vector(
+      Number.MAX_VALUE, Number.MAX_VALUE, Number.MAX_VALUE);
+    let maxVertex = new p5.Vector(
+      Number.MIN_VALUE, Number.MIN_VALUE, Number.MIN_VALUE);
+
+    for (let i = 0; i < this.vertices.length; i++) {
+      let vertex = this.vertices[i];
+      minVertex.x = Math.min(minVertex.x, vertex.x);
+      minVertex.y = Math.min(minVertex.y, vertex.y);
+      minVertex.z = Math.min(minVertex.z, vertex.z);
+
+      maxVertex.x = Math.max(maxVertex.x, vertex.x);
+      maxVertex.y = Math.max(maxVertex.y, vertex.y);
+      maxVertex.z = Math.max(maxVertex.z, vertex.z);
+    }
+    // Calculate size and offset properties
+    let size = new p5.Vector(maxVertex.x - minVertex.x,
+      maxVertex.y - minVertex.y, maxVertex.z - minVertex.z);
+    let offset = new p5.Vector((minVertex.x + maxVertex.x) / 2,
+      (minVertex.y + maxVertex.y) / 2, (minVertex.z + maxVertex.z) / 2);
+
+    // Cache the result for future access
+    this.boundingBoxCache = {
+      min: minVertex,
+      max: maxVertex,
+      size: size,
+      offset: offset
+    };
+
+    return this.boundingBoxCache;
   }
 
   reset() {
+    this._hasFillTransparency = undefined;
+    this._hasStrokeTransparency = undefined;
+
     this.lineVertices.clear();
     this.lineTangentsIn.clear();
     this.lineTangentsOut.clear();
@@ -88,6 +202,32 @@ p5.Geometry = class Geometry {
 
     this.dirtyFlags = {};
   }
+
+  hasFillTransparency() {
+    if (this._hasFillTransparency === undefined) {
+      this._hasFillTransparency = false;
+      for (let i = 0; i < this.vertexColors.length; i += 4) {
+        if (this.vertexColors[i + 3] < 1) {
+          this._hasFillTransparency = true;
+          break;
+        }
+      }
+    }
+    return this._hasFillTransparency;
+  }
+  hasStrokeTransparency() {
+    if (this._hasStrokeTransparency === undefined) {
+      this._hasStrokeTransparency = false;
+      for (let i = 0; i < this.lineVertexColors.length; i += 4) {
+        if (this.lineVertexColors[i + 3] < 1) {
+          this._hasStrokeTransparency = true;
+          break;
+        }
+      }
+    }
+    return this._hasStrokeTransparency;
+  }
+
   /**
    * Removes the internal colors of p5.Geometry.
    * Using `clearColors()`, you can use `fill()` to supply new colors before drawing each shape.
@@ -141,6 +281,150 @@ p5.Geometry = class Geometry {
   clearColors() {
     this.vertexColors = [];
     return this;
+  }
+  /**
+ * Flips the U texture coordinates of the model.
+ * @method flipU
+ * @for p5.Geometry
+ *
+ * @returns {p5.Geometry}
+ *
+ * @example
+ * <div>
+ * <code>
+ * let img;
+ * let model1;
+ * let model2;
+ *
+ * function preload() {
+ *   img = loadImage('assets/laDefense.jpg');
+ * }
+ *
+ * function setup() {
+ *   createCanvas(150, 150, WEBGL);
+ *   background(200);
+ *
+ *   model1 = createShape(50, 50);
+ *   model2 = createShape(50, 50);
+ *   model2.flipU();
+ * }
+ *
+ * function draw() {
+ *   background(0);
+ *
+ *   // original
+ *   push();
+ *   translate(-40, 0, 0);
+ *   texture(img);
+ *   noStroke();
+ *   plane(50);
+ *   model(model1);
+ *   pop();
+ *
+ *   // flipped
+ *   push();
+ *   translate(40, 0, 0);
+ *   texture(img);
+ *   noStroke();
+ *   plane(50);
+ *   model(model2);
+ *   pop();
+ * }
+ *
+ * function createShape(w, h) {
+ *   return buildGeometry(() => {
+ *     textureMode(NORMAL);
+ *     beginShape();
+ *     vertex(-w / 2, -h / 2, 0, 0);
+ *     vertex(w / 2, -h / 2, 1, 0);
+ *     vertex(w / 2, h / 2, 1, 1);
+ *     vertex(-w / 2, h / 2, 0, 1);
+ *     endShape(CLOSE);
+ *   });
+ * }
+ * </code>
+ * </div>
+ */
+  flipU() {
+    this.uvs = this.uvs.flat().map((val, index) => {
+      if (index % 2 === 0) {
+        return 1 - val;
+      } else {
+        return val;
+      }
+    });
+  }
+  /**
+ * Flips the V texture coordinates of the model.
+ * @method flipV
+ * @for p5.Geometry
+ *
+ * @returns {p5.Geometry}
+ *
+ * @example
+ * <div>
+ * <code>
+ * let img;
+ * let model1;
+ * let model2;
+ *
+ * function preload() {
+ *   img = loadImage('assets/laDefense.jpg');
+ * }
+ *
+ * function setup() {
+ *   createCanvas(150, 150, WEBGL);
+ *   background(200);
+ *
+ *   model1 = createShape(50, 50);
+ *   model2 = createShape(50, 50);
+ *   model2.flipV();
+ * }
+ *
+ * function draw() {
+ *   background(0);
+ *
+ *   // original
+ *   push();
+ *   translate(-40, 0, 0);
+ *   texture(img);
+ *   noStroke();
+ *   plane(50);
+ *   model(model1);
+ *   pop();
+ *
+ *   // flipped
+ *   push();
+ *   translate(40, 0, 0);
+ *   texture(img);
+ *   noStroke();
+ *   plane(50);
+ *   model(model2);
+ *   pop();
+ * }
+ *
+ * function createShape(w, h) {
+ *   return buildGeometry(() => {
+ *     textureMode(NORMAL);
+ *     beginShape();
+ *     vertex(-w / 2, -h / 2, 0, 0);
+ *     vertex(w / 2, -h / 2, 1, 0);
+ *     vertex(w / 2, h / 2, 1, 1);
+ *     vertex(-w / 2, h / 2, 0, 1);
+ *     endShape(CLOSE);
+ *   });
+ * }
+ * </code>
+ * </div>
+ */
+  flipV() {
+    this.uvs = this.uvs.flat().map((val, index) => {
+      if (index % 2 === 0) {
+        return val;
+      } else {
+        return 1 - val;
+      }
+    });
   }
   /**
  * computes faces for geometry objects based on the vertices.

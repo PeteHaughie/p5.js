@@ -768,6 +768,30 @@ suite('p5.RendererGL', function() {
       done();
     });
 
+    test('ambientLight() changes when metalness is applied', function (done) {
+      myp5.createCanvas(100, 100, myp5.WEBGL);
+      myp5.ambientLight(255, 255, 255);
+      myp5.noStroke();
+      myp5.metalness(100000);
+      myp5.sphere(50);
+      expect(myp5._renderer.mixedAmbientLight).to.not.deep.equal(
+        myp5._renderer.ambientLightColors);
+      done();
+    });
+
+    test('specularColor transforms to fill color when metalness is applied',
+      function (done) {
+        myp5.createCanvas(100, 100, myp5.WEBGL);
+        myp5.fill(0, 0, 0, 0);
+        myp5.specularMaterial(255, 255, 255, 255);
+        myp5.noStroke();
+        myp5.metalness(100000);
+        myp5.sphere(50);
+        expect(myp5._renderer.mixedSpecularColor).to.deep.equal(
+          myp5._renderer.curFillColor);
+        done();
+      });
+
     test('push/pop and shader() works with fill', function(done) {
       myp5.createCanvas(100, 100, myp5.WEBGL);
       var fillShader1 = myp5._renderer._getLightShader();
@@ -1233,6 +1257,30 @@ suite('p5.RendererGL', function() {
       myp5.point(0, 0, 0);
       assert.deepEqual(myp5.get(16, 16), [255, 0, 255, 255]);
       done();
+    });
+
+    test('transparency works the same with per-vertex colors', function() {
+      myp5.createCanvas(20, 20, myp5.WEBGL);
+      myp5.noStroke();
+
+      function drawShapes() {
+        myp5.fill(255, 0, 0, 100);
+        myp5.rect(-10, -10, 15, 15);
+        myp5.fill(0, 0, 255, 100);
+        myp5.rect(-5, -5, 15, 15);
+      }
+
+      drawShapes();
+      myp5.loadPixels();
+      const eachShapeResult = [...myp5.pixels];
+
+      myp5.clear();
+      const shapes = myp5.buildGeometry(drawShapes);
+      myp5.model(shapes);
+      myp5.loadPixels();
+      const singleShapeResult = [...myp5.pixels];
+
+      assert.deepEqual(eachShapeResult, singleShapeResult);
     });
   });
 
